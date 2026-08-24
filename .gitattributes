@@ -8,3 +8,6 @@
 *.csv text eol=lf
 *.pt binary
 *.pth binary
+
+# Preserve the bundled source dataset byte-for-byte.
+data/raw/*.csv binary
