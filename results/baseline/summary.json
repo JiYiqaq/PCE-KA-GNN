@@ -1,0 +1,34 @@
+{
+  "data_path": "data/raw/Active_Database.csv",
+  "device": "cpu",
+  "data_audit": {
+    "source": "prepared_pairs",
+    "prepared_pairs_path": "results/baseline/prepared_pairs_with_split.csv",
+    "unique_pairs": 495
+  },
+  "graph_audit": {
+    "requested_unique_molecules": 423,
+    "loaded_cached_molecules": 1042,
+    "invalid_cached_molecules": 55,
+    "built_molecules": 0,
+    "failed_molecules": 20,
+    "usable_pairs": 470,
+    "dropped_pairs_for_graph_failure": 25
+  },
+  "split_sizes": {
+    "train": 376,
+    "validation": 47,
+    "test": 47
+  },
+  "target_scaler": {
+    "mean": 3.9297826290130615,
+    "std": 3.549936294555664
+  },
+  "model_parameters": 5209,
+  "best_epoch": 2,
+  "test_metrics": {
+    "mae": 3.0582232037757304,
+    "rmse": 3.444224290760576,
+    "r2": -0.4890482078693976
+  }
+}

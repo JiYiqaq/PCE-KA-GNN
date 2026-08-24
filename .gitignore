@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+.idea/
+.vscode/
+
+# Generated graph caches can exceed GitHub's single-file limit.
+data/processed/*.pt
+data/processed/*.pth
+
+# New training runs are local by default. A verified lightweight baseline is
+# preserved separately under results/baseline/.
+outputs/
+
+# Common local environments.
+.venv/
+venv/
+env/

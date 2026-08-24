@@ -1,0 +1,30 @@
+data_path: "tests/fixtures/pce_smoke.csv"
+output_dir: "outputs/pce_smoke"
+graph_cache_path: "data/processed/pce_smoke_graphs.pt"
+
+donor_column: "donor_smiles"
+acceptor_column: "acceptor_smiles"
+target_column: "pce"
+encoder_atom: "cgcnn"
+encoder_bond: "dim_14"
+
+train_ratio: 0.8
+validation_ratio: 0.1
+test_ratio: 0.1
+seed: 42
+
+in_feat: 113
+hidden_feat: 8
+fusion_hidden: 8
+grid_feat: 1
+num_layers: 2
+pooling: "avg"
+use_bias: true
+
+device: "cpu"
+batch_size: 8
+num_workers: 0
+epochs: 2
+patience: 2
+learning_rate: 0.001
+weight_decay: 0.0
