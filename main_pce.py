@@ -44,6 +44,23 @@ def resolve_project_path(value: str | Path) -> Path:
     return path if path.is_absolute() else PROJECT_DIR / path
 
 
+def portable_result_path(value: str | Path) -> str:
+    path = Path(value)
+    try:
+        return path.resolve().relative_to(PROJECT_DIR.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def portable_audit_paths(audit: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: portable_result_path(value)
+        if key.endswith("_path") and isinstance(value, (str, Path))
+        else value
+        for key, value in audit.items()
+    }
+
+
 def sha256_file(path: str | Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -409,7 +426,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     prediction_table.to_csv(output_dir / "test_predictions.csv", index=False)
 
     summary = {
-        "data_path": str(data_path),
+        "data_path": portable_result_path(data_path),
         "device": runtime["device"],
         "runtime": {
             **runtime,
@@ -418,7 +435,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                 3,
             ),
         },
-        "data_audit": data_audit,
+        "data_audit": portable_audit_paths(data_audit),
         "graph_audit": graph_audit,
         "split_sizes": {name: int(len(part)) for name, part in splits.items()},
         "target_scaler": scaler.to_dict(),

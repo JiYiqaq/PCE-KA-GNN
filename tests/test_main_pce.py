@@ -125,6 +125,33 @@ class MainPCETests(unittest.TestCase):
         self.assertIn("Loaded 1", message)
         self.assertIn("validated pair cache", message)
 
+    def test_result_paths_inside_the_project_are_portable(self):
+        main_pce = self.load_module()
+        project_file = main_pce.PROJECT_DIR / "data" / "raw" / "Active_Database.csv"
+
+        self.assertEqual(
+            main_pce.portable_result_path(project_file),
+            "data/raw/Active_Database.csv",
+        )
+
+    def test_audit_path_fields_are_made_portable(self):
+        main_pce = self.load_module()
+        cache_path = main_pce.PROJECT_DIR / "data" / "processed" / "canonical_pairs.csv"
+
+        portable = main_pce.portable_audit_paths(
+            {
+                "source": "prepared_pairs_cache",
+                "prepared_pairs_cache_path": str(cache_path),
+                "unique_pairs": 5877,
+            }
+        )
+
+        self.assertEqual(
+            portable["prepared_pairs_cache_path"],
+            "data/processed/canonical_pairs.csv",
+        )
+        self.assertEqual(portable["unique_pairs"], 5877)
+
     def test_resolve_device_refuses_non_cuda_configuration(self):
         main_pce = self.load_module()
         self.assertTrue(
