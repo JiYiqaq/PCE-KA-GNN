@@ -47,6 +47,32 @@ class ProjectLayoutTests(unittest.TestCase):
                 config_path.name,
             )
 
+    def test_gpu_requirements_pin_the_verified_production_stack(self):
+        gpu_requirements_path = PROJECT_DIR / "requirements-gpu.txt"
+        self.assertTrue(
+            gpu_requirements_path.is_file(),
+            "the verified CUDA environment must have a reproducible requirements file",
+        )
+        gpu_requirements = gpu_requirements_path.read_text(encoding="utf-8")
+        common_requirements = (PROJECT_DIR / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertIn("torch==2.1.2+cu118", gpu_requirements)
+        self.assertIn("dgl==2.2.1+cu118", gpu_requirements)
+        self.assertIn("-r requirements.txt", gpu_requirements)
+        self.assertIn("torchdata==0.7.1", common_requirements)
+        self.assertIn("pydantic==1.10.26", common_requirements)
+        self.assertIn("psutil==7.0.0", common_requirements)
+        self.assertNotIn("dgl==2.0.0", common_requirements)
+
+    def test_readme_documents_gpu_as_the_only_formal_runtime(self):
+        readme = (PROJECT_DIR / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("pce_kagnn_gpu", readme)
+        self.assertIn("requirements-gpu.txt", readme)
+        self.assertIn("2.1.2+cu118", readme)
+        self.assertIn("2.2.1+cu118", readme)
+        self.assertNotIn("CPU 版 PyTorch", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

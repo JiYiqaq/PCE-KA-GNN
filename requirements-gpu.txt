@@ -1,0 +1,6 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+--find-links https://data.dgl.ai/wheels/cu118/repo.html
+
+torch==2.1.2+cu118
+dgl==2.2.1+cu118
+-r requirements.txt

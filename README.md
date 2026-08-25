@@ -14,34 +14,34 @@ PCE-KA-GNN/
 ├── config/                     # 完整、快速和冒烟配置
 ├── data/
 │   ├── raw/Active_Database.csv # 仓库内置 OPV-DB 数据
-│   └── processed/              # 运行时自动生成图缓存
+│   └── processed/              # 已准备的分子对及运行时图缓存
 ├── model/
 │   ├── ka_gnn.py               # 来自原 KA-GNN 项目的 Fourier-KAN 层
 │   └── pce_ka_gnn.py           # 双分支 PCE 回归模型
 ├── pce/                        # 配对数据与训练工具
 ├── tests/                      # 自动测试与小型冒烟数据
-├── results/baseline/           # 已验证的两轮 CPU 基线结果
+├── results/baseline/           # 历史兼容性基线结果
 └── docs/                       # 设计与实现说明
 ```
 
 ## 环境配置
 
-已验证环境为 Windows、Python 3.10.20 和 CPU 版 PyTorch 2.0.1。
+正式环境已在 Windows、Python 3.10.20、NVIDIA GeForce GTX 1650 Ti 上验证：PyTorch `2.1.2+cu118`、DGL `2.2.1+cu118`、torchdata `0.7.1`。所有随仓库提供的运行配置都要求 CUDA；CUDA 不可用时程序立即报错，不会静默改用 CPU。
 
 ```bash
-conda create -n pce-kagnn python=3.10 -y
-conda activate pce-kagnn
+conda create -n pce_kagnn_gpu python=3.10 -y
+conda activate pce_kagnn_gpu
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-gpu.txt
 python -m pip check
+python -c "import torch,dgl; g=dgl.graph(([0],[1])).to('cuda'); print(torch.__version__, dgl.__version__, torch.cuda.get_device_name(0), g.device)"
 ```
 
-如需 GPU，请根据自己的 CUDA 版本从 PyTorch 和 DGL 官方渠道安装对应构建，其他依赖保持不变。
+验证命令必须显示 `2.1.2+cu118`、`2.2.1+cu118`、实际 NVIDIA 显卡名称和 `cuda:0`，之后才能开始训练。
 
 ## 运行
 
-先运行小型冒烟测试，确认环境和完整流程正常：
+小型冒烟配置只减少数据量和训练轮数，仍使用与正式实验相同的 CUDA 运行栈：
 
 ```bash
 python main_pce.py --config config/pce_smoke.yaml
@@ -59,7 +59,7 @@ python main_pce.py --config config/pce_quick.yaml
 python main_pce.py --config config/pce.yaml
 ```
 
-首次真实数据运行会规范化 SMILES，并使用 RDKit 生成三维构象和非共价边，因此 CPU 建图可能持续数小时。生成的图缓存写入 `data/processed/pce_graphs.pt`，之后运行会自动复用。该缓存约 131 MB，超过 GitHub 普通仓库 100 MB 的单文件限制，因此没有提交；它完全可以由仓库内置 CSV 重建。
+仓库提供带源文件 SHA256 校验的规范化分子对缓存 `data/processed/canonical_pairs.csv`，避免每次重复处理原始 SMILES。程序使用 RDKit 生成三维构象和非共价边；这一步由 RDKit 在 CPU 上执行，但只在图缓存不存在时运行。生成的图缓存写入 `data/processed/pce_graphs.pt`，之后自动复用。该缓存约 131 MB，超过 GitHub 普通仓库 100 MB 的单文件限制，因此没有提交；它可以由仓库内置 CSV 重建。
 
 运行输出默认保存在 `outputs/`，包括：
 
