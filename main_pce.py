@@ -140,7 +140,7 @@ def write_automatic_pair_cache(
     metadata_path = pair_cache_metadata_path(cache_path)
     temporary_cache = cache_path.with_name(cache_path.name + ".tmp")
     temporary_metadata = metadata_path.with_name(metadata_path.name + ".tmp")
-    pair_table.to_csv(temporary_cache, index=False)
+    pair_table.to_csv(temporary_cache, index=False, lineterminator="\n")
     metadata = {
         "signature": signature,
         "cache_sha256": sha256_file(temporary_cache),

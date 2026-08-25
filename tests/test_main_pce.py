@@ -108,6 +108,28 @@ class MainPCETests(unittest.TestCase):
         self.assertEqual(audit["source"], "raw_csv")
         self.assertEqual(len(pairs), 2)
 
+    def test_automatic_pair_cache_uses_repository_line_endings(self):
+        main_pce = self.load_module()
+        pairs = pd.DataFrame(
+            {
+                "donor_smiles": ["CCO"],
+                "acceptor_smiles": ["CCN"],
+                "pce": [7.5],
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = Path(directory) / "canonical_pairs.csv"
+            main_pce.write_automatic_pair_cache(
+                pairs,
+                cache_path,
+                {"version": 1},
+                {"source": "raw_csv", "unique_pairs": 1},
+            )
+            cache_bytes = cache_path.read_bytes()
+
+        self.assertIn(b"\n", cache_bytes)
+        self.assertNotIn(b"\r\n", cache_bytes)
+
     def test_pair_data_status_identifies_the_validated_cache(self):
         main_pce = self.load_module()
         pairs = pd.DataFrame(
