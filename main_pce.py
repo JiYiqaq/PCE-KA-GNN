@@ -3,9 +3,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 from pathlib import Path
 from typing import Any
+
+# This must be set before CUDA is initialized for deterministic cuBLAS kernels.
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 import numpy as np
 import pandas as pd
@@ -154,6 +158,10 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    dgl.seed(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
@@ -194,6 +202,8 @@ def runtime_metadata(device: torch.device) -> dict[str, Any]:
         "gpu_name": properties.name,
         "gpu_memory_gb": round(properties.total_memory / 1024**3, 3),
         "compute_capability": f"{properties.major}.{properties.minor}",
+        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "cublas_workspace_config": os.environ["CUBLAS_WORKSPACE_CONFIG"],
     }
 
 

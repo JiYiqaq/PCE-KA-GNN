@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -179,6 +180,18 @@ class MainPCETests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "CUDA"):
             main_pce.runtime_metadata(main_pce.torch.device("cpu"))
+
+    def test_set_seed_configures_deterministic_cuda_execution(self):
+        main_pce = self.load_module()
+
+        with mock.patch.object(main_pce.dgl, "seed") as dgl_seed:
+            main_pce.set_seed(42)
+
+        dgl_seed.assert_called_once_with(42)
+        self.assertTrue(main_pce.torch.are_deterministic_algorithms_enabled())
+        self.assertTrue(main_pce.torch.backends.cudnn.deterministic)
+        self.assertFalse(main_pce.torch.backends.cudnn.benchmark)
+        self.assertEqual(os.environ.get("CUBLAS_WORKSPACE_CONFIG"), ":4096:8")
 
 
 if __name__ == "__main__":
