@@ -48,6 +48,64 @@ class MainPCETests(unittest.TestCase):
         self.assertEqual(float(pairs.iloc[0]["pce"]), 7.5)
         self.assertEqual(audit["source"], "prepared_pairs")
 
+    def test_load_pair_data_reuses_a_fingerprinted_automatic_cache(self):
+        main_pce = self.load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            raw_path = directory / "raw.csv"
+            cache_path = directory / "processed" / "canonical_pairs.csv"
+            pd.DataFrame(
+                {
+                    "donor_smiles": ["CCO"],
+                    "acceptor_smiles": ["CCN"],
+                    "pce": [7.5],
+                }
+            ).to_csv(raw_path, index=False)
+            config = {
+                "data_path": str(raw_path),
+                "prepared_pairs_cache_path": str(cache_path),
+            }
+
+            first_pairs, first_audit = main_pce.load_pair_data(config, directory / "out")
+            second_pairs, second_audit = main_pce.load_pair_data(config, directory / "out")
+
+            self.assertEqual(first_audit["source"], "raw_csv")
+            self.assertEqual(second_audit["source"], "prepared_pairs_cache")
+            self.assertTrue(cache_path.is_file())
+            self.assertTrue(cache_path.with_suffix(".meta.json").is_file())
+            pd.testing.assert_frame_equal(first_pairs, second_pairs)
+
+    def test_load_pair_data_invalidates_cache_when_the_source_changes(self):
+        main_pce = self.load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            raw_path = directory / "raw.csv"
+            cache_path = directory / "processed" / "canonical_pairs.csv"
+            config = {
+                "data_path": str(raw_path),
+                "prepared_pairs_cache_path": str(cache_path),
+            }
+            pd.DataFrame(
+                {
+                    "donor_smiles": ["CCO"],
+                    "acceptor_smiles": ["CCN"],
+                    "pce": [7.5],
+                }
+            ).to_csv(raw_path, index=False)
+            main_pce.load_pair_data(config, directory / "out")
+
+            pd.DataFrame(
+                {
+                    "donor_smiles": ["CCO", "CCC"],
+                    "acceptor_smiles": ["CCN", "CCO"],
+                    "pce": [7.5, 4.0],
+                }
+            ).to_csv(raw_path, index=False)
+            pairs, audit = main_pce.load_pair_data(config, directory / "out")
+
+        self.assertEqual(audit["source"], "raw_csv")
+        self.assertEqual(len(pairs), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

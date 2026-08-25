@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -24,6 +25,8 @@ from pce.training import TargetScaler, evaluate, train_one_epoch
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+PAIR_CACHE_VERSION = 1
+PAIR_COLUMNS = ("donor_smiles", "acceptor_smiles", "pce")
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -38,6 +41,95 @@ def load_config(path: str | Path) -> dict[str, Any]:
 def resolve_project_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else PROJECT_DIR / path
+
+
+def sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest().upper()
+
+
+def read_prepared_pairs(path: str | Path) -> pd.DataFrame:
+    pair_table = pd.read_csv(path, low_memory=False)
+    missing = sorted(set(PAIR_COLUMNS).difference(pair_table.columns))
+    if missing:
+        raise ValueError("Prepared pair table is missing columns: " + ", ".join(missing))
+    numeric_pce = pd.to_numeric(pair_table["pce"], errors="coerce")
+    valid = (
+        pair_table["donor_smiles"].notna()
+        & pair_table["acceptor_smiles"].notna()
+        & numeric_pce.notna()
+        & np.isfinite(numeric_pce)
+    )
+    if not bool(valid.all()):
+        raise ValueError("Prepared pair table contains missing or non-finite values")
+    if bool(pair_table.duplicated(["donor_smiles", "acceptor_smiles"]).any()):
+        raise ValueError("Prepared pair table contains duplicate donor-acceptor pairs")
+    pair_table = pair_table.copy()
+    pair_table["pce"] = numeric_pce.astype(float)
+    return pair_table
+
+
+def pair_cache_metadata_path(cache_path: str | Path) -> Path:
+    return Path(cache_path).with_suffix(".meta.json")
+
+
+def pair_cache_signature(data_path: Path, config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "version": PAIR_CACHE_VERSION,
+        "source_sha256": sha256_file(data_path),
+        "donor_column": config.get("donor_column", "donor_smiles"),
+        "acceptor_column": config.get("acceptor_column", "acceptor_smiles"),
+        "target_column": config.get("target_column", "pce"),
+    }
+
+
+def load_automatic_pair_cache(
+    cache_path: Path,
+    signature: dict[str, Any],
+) -> tuple[pd.DataFrame, dict[str, Any]] | None:
+    metadata_path = pair_cache_metadata_path(cache_path)
+    if not cache_path.is_file() or not metadata_path.is_file():
+        return None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata.get("signature") != signature:
+            return None
+        if metadata.get("cache_sha256") != sha256_file(cache_path):
+            return None
+        pair_table = read_prepared_pairs(cache_path)
+        data_audit = dict(metadata["data_audit"])
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    data_audit["source"] = "prepared_pairs_cache"
+    data_audit["prepared_pairs_cache_path"] = str(cache_path)
+    return pair_table, data_audit
+
+
+def write_automatic_pair_cache(
+    pair_table: pd.DataFrame,
+    cache_path: Path,
+    signature: dict[str, Any],
+    data_audit: dict[str, Any],
+) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path = pair_cache_metadata_path(cache_path)
+    temporary_cache = cache_path.with_name(cache_path.name + ".tmp")
+    temporary_metadata = metadata_path.with_name(metadata_path.name + ".tmp")
+    pair_table.to_csv(temporary_cache, index=False)
+    metadata = {
+        "signature": signature,
+        "cache_sha256": sha256_file(temporary_cache),
+        "data_audit": {key: value for key, value in data_audit.items() if key != "source"},
+    }
+    temporary_metadata.write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary_cache.replace(cache_path)
+    temporary_metadata.replace(metadata_path)
 
 
 def set_seed(seed: int) -> None:
@@ -77,26 +169,7 @@ def load_pair_data(
         prepared_path = resolve_project_path(prepared_value)
         if not prepared_path.exists():
             raise FileNotFoundError(f"Prepared PCE pair table not found: {prepared_path}")
-        pair_table = pd.read_csv(prepared_path, low_memory=False)
-        required = {"donor_smiles", "acceptor_smiles", "pce"}
-        missing = sorted(required.difference(pair_table.columns))
-        if missing:
-            raise ValueError(
-                "Prepared pair table is missing columns: " + ", ".join(missing)
-            )
-        numeric_pce = pd.to_numeric(pair_table["pce"], errors="coerce")
-        valid = (
-            pair_table["donor_smiles"].notna()
-            & pair_table["acceptor_smiles"].notna()
-            & numeric_pce.notna()
-            & np.isfinite(numeric_pce)
-        )
-        if not bool(valid.all()):
-            raise ValueError("Prepared pair table contains missing or non-finite values")
-        if bool(pair_table.duplicated(["donor_smiles", "acceptor_smiles"]).any()):
-            raise ValueError("Prepared pair table contains duplicate donor-acceptor pairs")
-        pair_table = pair_table.copy()
-        pair_table["pce"] = numeric_pce.astype(float)
+        pair_table = read_prepared_pairs(prepared_path)
         return pair_table, {
             "source": "prepared_pairs",
             "prepared_pairs_path": str(prepared_path),
@@ -108,6 +181,13 @@ def load_pair_data(
         raise FileNotFoundError(
             f"PCE CSV not found: {data_path}. Restore the file or update data_path in the YAML config."
         )
+    cache_path = resolve_project_path(
+        config.get("prepared_pairs_cache_path", "data/processed/canonical_pairs.csv")
+    )
+    signature = pair_cache_signature(data_path, config)
+    cached = load_automatic_pair_cache(cache_path, signature)
+    if cached is not None:
+        return cached
     raw_frame = pd.read_csv(data_path, low_memory=False)
     pair_table, data_audit = prepare_pair_table(
         raw_frame,
@@ -116,6 +196,7 @@ def load_pair_data(
         target_col=config.get("target_column", "pce"),
     )
     data_audit["source"] = "raw_csv"
+    write_automatic_pair_cache(pair_table, cache_path, signature, data_audit)
     output_dir = resolve_project_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     pair_table.to_csv(output_dir / "canonical_pairs.csv", index=False)
