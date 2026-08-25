@@ -9,6 +9,9 @@ __pycache__/
 # Generated graph caches can exceed GitHub's single-file limit.
 data/processed/*.pt
 data/processed/*.pth
+# Smoke-test pair caches are reproducible local artifacts.
+data/processed/pce_smoke_pairs.csv
+data/processed/pce_smoke_pairs.meta.json
 
 # New training runs are local by default. A verified lightweight baseline is
 # preserved separately under results/baseline/.

@@ -2,6 +2,7 @@ import importlib
 import importlib.util
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import dgl
@@ -192,6 +193,21 @@ class PCEDataTests(unittest.TestCase):
         self.assertEqual(batch["acceptor_graph"].batch_size, 2)
         self.assertTrue(torch.equal(batch["target"], torch.tensor([1.5, 2.5])))
         self.assertEqual(batch["donor_smiles"], ["A", "B"])
+
+    def test_author_graph_builder_uses_the_current_dgl_constructor(self):
+        from utils.graph_path import atom_to_graph
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            graph = atom_to_graph("CCO", "cgcnn", "dim_14")
+
+        self.assertIsNot(graph, False)
+        deprecated = [
+            warning
+            for warning in caught
+            if "Recommend creating graphs by `dgl.graph(data)`" in str(warning.message)
+        ]
+        self.assertEqual(deprecated, [])
 
 
 if __name__ == "__main__":
