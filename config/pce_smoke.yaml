@@ -1,6 +1,7 @@
 data_path: "tests/fixtures/pce_smoke.csv"
 output_dir: "outputs/pce_smoke"
 graph_cache_path: "data/processed/pce_smoke_graphs.pt"
+prepared_pairs_cache_path: "data/processed/pce_smoke_pairs.csv"
 
 donor_column: "donor_smiles"
 acceptor_column: "acceptor_smiles"
@@ -21,7 +22,7 @@ num_layers: 2
 pooling: "avg"
 use_bias: true
 
-device: "cpu"
+device: "cuda"
 batch_size: 8
 num_workers: 0
 epochs: 2

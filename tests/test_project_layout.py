@@ -31,6 +31,22 @@ class ProjectLayoutTests(unittest.TestCase):
             self.assertNotIn("G:/", text)
             self.assertNotIn("D:/PychramProject/KA-GNN-main", text)
 
+    def test_all_run_configs_require_cuda_and_share_the_pair_cache(self):
+        config_dir = PROJECT_DIR / "config"
+        expected_cache_paths = {
+            "pce.yaml": "data/processed/canonical_pairs.csv",
+            "pce_quick.yaml": "data/processed/canonical_pairs.csv",
+            "pce_smoke.yaml": "data/processed/pce_smoke_pairs.csv",
+        }
+        for config_path in config_dir.glob("*.yaml"):
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(config["device"], "cuda", config_path.name)
+            self.assertEqual(
+                config["prepared_pairs_cache_path"],
+                expected_cache_paths[config_path.name],
+                config_path.name,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

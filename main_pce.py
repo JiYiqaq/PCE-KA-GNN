@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 import yaml
+import dgl
 from torch.utils.data import DataLoader
 
 from model.pce_ka_gnn import DualKAGNNRegressor
@@ -138,6 +139,45 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def resolve_device(requested_device: object) -> torch.device:
+    requested = str(requested_device).strip().lower()
+    if requested != "cuda":
+        raise ValueError(
+            "Production runs require configuration 'device: cuda'; "
+            f"received {requested_device!r}."
+        )
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA is required for this production run, but PyTorch cannot access it. "
+            "Install the verified CUDA environment instead of falling back to CPU."
+        )
+    device = torch.device("cuda:0")
+    try:
+        probe = torch.ones(1, device=device)
+        if float(probe.sum()) != 1.0:
+            raise RuntimeError("CUDA verification returned an invalid value")
+        torch.cuda.synchronize(device)
+    except Exception as error:
+        raise RuntimeError(f"CUDA device verification failed: {error}") from error
+    return device
+
+
+def runtime_metadata(device: torch.device) -> dict[str, Any]:
+    if device.type != "cuda":
+        raise ValueError("CUDA runtime metadata requires a CUDA device")
+    index = device.index if device.index is not None else torch.cuda.current_device()
+    properties = torch.cuda.get_device_properties(index)
+    return {
+        "device": f"cuda:{index}",
+        "torch_version": torch.__version__,
+        "dgl_version": dgl.__version__,
+        "cuda_runtime": torch.version.cuda,
+        "gpu_name": properties.name,
+        "gpu_memory_gb": round(properties.total_memory / 1024**3, 3),
+        "compute_capability": f"{properties.major}.{properties.minor}",
+    }
 
 
 def make_loader(
@@ -271,9 +311,9 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     }
     scaler = TargetScaler.fit(torch.tensor(splits["train"]["pce"].to_numpy(), dtype=torch.float32))
 
-    requested_device = str(config.get("device", "auto")).lower()
-    use_cuda = requested_device != "cpu" and torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = resolve_device(config.get("device"))
+    runtime = runtime_metadata(device)
+    torch.cuda.reset_peak_memory_stats(device)
     model_config = {
         "in_feat": int(config.get("in_feat", 113)),
         "hidden_feat": int(config.get("hidden_feat", 64)),
@@ -290,7 +330,12 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         weight_decay=float(config.get("weight_decay", 0.0)),
     )
     print(
-        f"Device: {device}; trainable parameters: "
+        f"Runtime: PyTorch {runtime['torch_version']}; DGL {runtime['dgl_version']}; "
+        f"CUDA {runtime['cuda_runtime']}; GPU {runtime['gpu_name']} "
+        f"({runtime['gpu_memory_gb']:.1f} GB)"
+    )
+    print(
+        f"Device: {runtime['device']}; trainable parameters: "
         f"{sum(parameter.numel() for parameter in model.parameters())}"
     )
 
@@ -354,7 +399,14 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
 
     summary = {
         "data_path": str(data_path),
-        "device": str(device),
+        "device": runtime["device"],
+        "runtime": {
+            **runtime,
+            "peak_gpu_memory_mb": round(
+                torch.cuda.max_memory_allocated(device) / 1024**2,
+                3,
+            ),
+        },
         "data_audit": data_audit,
         "graph_audit": graph_audit,
         "split_sizes": {name: int(len(part)) for name, part in splits.items()},

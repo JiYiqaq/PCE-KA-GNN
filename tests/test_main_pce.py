@@ -3,6 +3,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -105,6 +106,34 @@ class MainPCETests(unittest.TestCase):
 
         self.assertEqual(audit["source"], "raw_csv")
         self.assertEqual(len(pairs), 2)
+
+    def test_resolve_device_refuses_non_cuda_configuration(self):
+        main_pce = self.load_module()
+        self.assertTrue(
+            hasattr(main_pce, "resolve_device"),
+            "the production entry point must expose an explicit CUDA resolver",
+        )
+
+        with self.assertRaisesRegex(ValueError, "device: cuda"):
+            main_pce.resolve_device("cpu")
+
+    def test_resolve_device_fails_instead_of_falling_back_without_cuda(self):
+        main_pce = self.load_module()
+        self.assertTrue(hasattr(main_pce, "resolve_device"))
+
+        with mock.patch.object(main_pce.torch.cuda, "is_available", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "CUDA"):
+                main_pce.resolve_device("cuda")
+
+    def test_runtime_metadata_rejects_a_cpu_device(self):
+        main_pce = self.load_module()
+        self.assertTrue(
+            hasattr(main_pce, "runtime_metadata"),
+            "every result summary must include verified GPU runtime metadata",
+        )
+
+        with self.assertRaisesRegex(ValueError, "CUDA"):
+            main_pce.runtime_metadata(main_pce.torch.device("cpu"))
 
 
 if __name__ == "__main__":
