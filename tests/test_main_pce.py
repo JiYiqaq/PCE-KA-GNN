@@ -107,6 +107,24 @@ class MainPCETests(unittest.TestCase):
         self.assertEqual(audit["source"], "raw_csv")
         self.assertEqual(len(pairs), 2)
 
+    def test_pair_data_status_identifies_the_validated_cache(self):
+        main_pce = self.load_module()
+        pairs = pd.DataFrame(
+            {
+                "donor_smiles": ["CCO"],
+                "acceptor_smiles": ["CCN"],
+                "pce": [7.5],
+            }
+        )
+
+        message = main_pce.pair_data_status_message(
+            pairs,
+            {"source": "prepared_pairs_cache"},
+        )
+
+        self.assertIn("Loaded 1", message)
+        self.assertIn("validated pair cache", message)
+
     def test_resolve_device_refuses_non_cuda_configuration(self):
         main_pce = self.load_module()
         self.assertTrue(

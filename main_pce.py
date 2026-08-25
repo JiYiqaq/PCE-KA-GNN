@@ -243,6 +243,23 @@ def load_pair_data(
     return pair_table, data_audit
 
 
+def pair_data_status_message(
+    pair_table: pd.DataFrame,
+    data_audit: dict[str, Any],
+) -> str:
+    source = data_audit.get("source")
+    if source == "prepared_pairs_cache":
+        return f"Loaded {len(pair_table)} donor-acceptor pairs from the validated pair cache."
+    if source == "prepared_pairs":
+        return f"Loaded {len(pair_table)} donor-acceptor pairs from the prepared pair table."
+    if source == "raw_csv":
+        return (
+            f"Prepared {len(pair_table)} unique donor-acceptor pairs "
+            f"from {data_audit['input_rows']} rows."
+        )
+    raise ValueError(f"unknown pair-data source: {source!r}")
+
+
 def run(config: dict[str, Any]) -> dict[str, Any]:
     seed = int(config.get("seed", 42))
     set_seed(seed)
@@ -257,13 +274,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     )
 
     pair_table, data_audit = load_pair_data(config, output_dir)
-    if data_audit["source"] == "prepared_pairs":
-        print(f"Loaded {len(pair_table)} previously prepared donor-acceptor pairs.")
-    else:
-        print(
-            f"Prepared {len(pair_table)} unique donor-acceptor pairs "
-            f"from {data_audit['input_rows']} rows."
-        )
+    print(pair_data_status_message(pair_table, data_audit))
 
     graphs, pair_table, graph_audit = build_graph_cache(
         pair_table,
