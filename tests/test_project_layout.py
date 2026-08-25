@@ -67,7 +67,8 @@ class ProjectLayoutTests(unittest.TestCase):
     def test_readme_documents_gpu_as_the_only_formal_runtime(self):
         readme = (PROJECT_DIR / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn("pce_kagnn_gpu", readme)
+        self.assertIn("conda activate kagnn", readme)
+        self.assertNotIn("pce_kagnn_gpu", readme)
         self.assertIn("requirements-gpu.txt", readme)
         self.assertIn("2.1.2+cu118", readme)
         self.assertIn("2.2.1+cu118", readme)

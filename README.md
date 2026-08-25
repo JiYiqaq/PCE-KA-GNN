@@ -29,8 +29,8 @@ PCE-KA-GNN/
 正式环境已在 Windows、Python 3.10.20、NVIDIA GeForce GTX 1650 Ti 上验证：PyTorch `2.1.2+cu118`、DGL `2.2.1+cu118`、torchdata `0.7.1`。所有随仓库提供的运行配置都要求 CUDA；CUDA 不可用时程序立即报错，不会静默改用 CPU。训练入口还会固定 Python、NumPy、PyTorch 与 DGL 随机种子，并启用确定性 CUDA 算法。
 
 ```bash
-conda create -n pce_kagnn_gpu python=3.10 -y
-conda activate pce_kagnn_gpu
+conda create -n kagnn python=3.10 -y
+conda activate kagnn
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements-gpu.txt
 python -m pip check
