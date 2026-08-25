@@ -20,13 +20,13 @@ PCE-KA-GNN/
 │   └── pce_ka_gnn.py           # 双分支 PCE 回归模型
 ├── pce/                        # 配对数据与训练工具
 ├── tests/                      # 自动测试与小型冒烟数据
-├── results/baseline/           # 历史兼容性基线结果
+├── results/baseline/           # 可复现的正式 GPU 基线结果
 └── docs/                       # 设计与实现说明
 ```
 
 ## 环境配置
 
-正式环境已在 Windows、Python 3.10.20、NVIDIA GeForce GTX 1650 Ti 上验证：PyTorch `2.1.2+cu118`、DGL `2.2.1+cu118`、torchdata `0.7.1`。所有随仓库提供的运行配置都要求 CUDA；CUDA 不可用时程序立即报错，不会静默改用 CPU。
+正式环境已在 Windows、Python 3.10.20、NVIDIA GeForce GTX 1650 Ti 上验证：PyTorch `2.1.2+cu118`、DGL `2.2.1+cu118`、torchdata `0.7.1`。所有随仓库提供的运行配置都要求 CUDA；CUDA 不可用时程序立即报错，不会静默改用 CPU。训练入口还会固定 Python、NumPy、PyTorch 与 DGL 随机种子，并启用确定性 CUDA 算法。
 
 ```bash
 conda create -n pce_kagnn_gpu python=3.10 -y
@@ -53,7 +53,7 @@ python main_pce.py --config config/pce_smoke.yaml
 python main_pce.py --config config/pce_quick.yaml
 ```
 
-运行默认 100 轮实验：
+运行默认正式实验（最多 100 轮，带 early stopping）：
 
 ```bash
 python main_pce.py --config config/pce.yaml
@@ -64,7 +64,6 @@ python main_pce.py --config config/pce.yaml
 运行输出默认保存在 `outputs/`，包括：
 
 - `best_model.pt`：验证集 MAE 最佳的模型；
-- `canonical_pairs.csv`：规范化、按有序给体–受体组合聚合的数据；
 - `prepared_pairs_with_split.csv`：最终划分；
 - `training_history.csv`：逐轮训练记录；
 - `test_predictions.csv`：测试集真实值和预测值；
@@ -78,15 +77,15 @@ python main_pce.py --config config/pce.yaml
 
 ## 当前基线
 
-两轮 CPU 快速运行中，38,849 条原始记录整理为 5,877 个唯一组合。受原作者三维建图方法限制，最终 470 个组合可用于该基线，划分为 376/47/47：
+正式 GPU 基线使用 seed 42、batch size 32、最多 100 epochs 和 patience 20。38,849 条原始记录整理为 5,877 个唯一组合；受原作者三维建图方法限制，最终只有 470 个组合可用，划分为 376/47/47。程序在第 57 epoch 早停，验证集 MAE 最佳模型来自第 37 epoch。在 GTX 1650 Ti 上复用分子对与图缓存时，完整运行约 47 秒：
 
 | 指标 | 测试集结果 |
 |---|---:|
-| MAE | 3.0582 |
-| RMSE | 3.4442 |
-| R² | -0.4890 |
+| MAE | 2.2126 |
+| RMSE | 2.7700 |
+| R² | 0.2163 |
 
-该结果只证明流程可运行，不代表达到可发表性能。负 R² 表明快速基线尚未超过均值预测；三维建图成功率、数据划分、更多制备条件输入以及系统基线对比都是后续研究重点。
+独立进程复跑得到完全一致的逐 epoch 记录和最终指标。该结果是可复现的单 seed 工程基线，不是可直接投稿的最终结论：现有建图流程丢弃了 5,407/5,877 个分子对，且论文实验仍需多随机种子均值与标准差、合理的数据划分、更多制备条件输入以及系统基线对比。
 
 ## 测试
 

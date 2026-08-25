@@ -1,19 +1,36 @@
 {
   "data_path": "data/raw/Active_Database.csv",
-  "device": "cpu",
+  "device": "cuda:0",
+  "runtime": {
+    "device": "cuda:0",
+    "torch_version": "2.1.2+cu118",
+    "dgl_version": "2.2.1+cu118",
+    "cuda_runtime": "11.8",
+    "gpu_name": "NVIDIA GeForce GTX 1650 Ti",
+    "gpu_memory_gb": 4.0,
+    "compute_capability": "7.5",
+    "deterministic_algorithms": true,
+    "cublas_workspace_config": ":4096:8",
+    "peak_gpu_memory_mb": 201.009
+  },
   "data_audit": {
-    "source": "prepared_pairs",
-    "prepared_pairs_path": "results/baseline/prepared_pairs_with_split.csv",
-    "unique_pairs": 495
+    "input_rows": 38849,
+    "missing_or_non_numeric_rows": 12348,
+    "invalid_smiles_rows": 0,
+    "valid_rows": 26501,
+    "unique_pairs": 5877,
+    "collapsed_replicate_rows": 20624,
+    "source": "prepared_pairs_cache",
+    "prepared_pairs_cache_path": "data/processed/canonical_pairs.csv"
   },
   "graph_audit": {
-    "requested_unique_molecules": 423,
+    "requested_unique_molecules": 3987,
     "loaded_cached_molecules": 1042,
-    "invalid_cached_molecules": 55,
+    "invalid_cached_molecules": 0,
     "built_molecules": 0,
-    "failed_molecules": 20,
+    "failed_molecules": 2945,
     "usable_pairs": 470,
-    "dropped_pairs_for_graph_failure": 25
+    "dropped_pairs_for_graph_failure": 5407
   },
   "split_sizes": {
     "train": 376,
@@ -21,14 +38,14 @@
     "test": 47
   },
   "target_scaler": {
-    "mean": 3.9297826290130615,
-    "std": 3.549936294555664
+    "mean": 3.6719555854797363,
+    "std": 3.524655818939209
   },
-  "model_parameters": 5209,
-  "best_epoch": 2,
+  "model_parameters": 55777,
+  "best_epoch": 37,
   "test_metrics": {
-    "mae": 3.0582232037757304,
-    "rmse": 3.444224290760576,
-    "r2": -0.4890482078693976
+    "mae": 2.212582785398402,
+    "rmse": 2.769972203349439,
+    "r2": 0.2163260174157252
   }
 }
