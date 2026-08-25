@@ -181,10 +181,13 @@ def build_graph_cache(
     failed_smiles: set[str] = set()
     loaded_cached_molecules = 0
     invalid_cached_molecules = 0
+    cache_is_current = False
+    cache_dirty = False
 
     if cache_path.exists():
         payload = torch.load(cache_path, map_location="cpu")
         if payload.get("metadata") == metadata:
+            cache_is_current = True
             graphs = payload.get("graphs", {})
             failed_smiles = set(payload.get("failed_smiles", []))
             invalid_cached = {
@@ -197,6 +200,10 @@ def build_graph_cache(
             failed_smiles.update(invalid_cached)
             invalid_cached_molecules = len(invalid_cached)
             loaded_cached_molecules = len(graphs)
+            cache_dirty = bool(invalid_cached)
+
+    if not cache_is_current:
+        cache_dirty = True
 
     required_smiles = sorted(
         set(pair_table["donor_smiles"]).union(pair_table["acceptor_smiles"])
@@ -210,28 +217,33 @@ def build_graph_cache(
             graph = builder(smiles, encoder_atom, encoder_bond)
             if graph is False or graph is None:
                 failed_smiles.add(smiles)
+                cache_dirty = True
                 continue
             graph = add_edge_aggregates(graph)
             if not graph_has_finite_features(graph):
                 failed_smiles.add(smiles)
+                cache_dirty = True
                 continue
             graphs[smiles] = graph
             built_molecules += 1
+            cache_dirty = True
         except Exception:
             failed_smiles.add(smiles)
+            cache_dirty = True
 
     usable_mask = pair_table["donor_smiles"].isin(graphs) & pair_table["acceptor_smiles"].isin(graphs)
     usable_pairs = pair_table.loc[usable_mask].reset_index(drop=True).copy()
 
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "metadata": metadata,
-            "graphs": graphs,
-            "failed_smiles": sorted(failed_smiles),
-        },
-        cache_path,
-    )
+    if cache_dirty:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "metadata": metadata,
+                "graphs": graphs,
+                "failed_smiles": sorted(failed_smiles),
+            },
+            cache_path,
+        )
     audit = {
         "requested_unique_molecules": int(len(required_smiles)),
         "loaded_cached_molecules": int(loaded_cached_molecules),

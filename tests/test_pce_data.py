@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 import dgl
 import pandas as pd
@@ -124,13 +125,15 @@ class PCEDataTests(unittest.TestCase):
             self.assertEqual(len(usable), 2)
 
             calls.clear()
-            loaded_graphs, loaded_usable, second_audit = data.build_graph_cache(
-                pairs,
-                cache_path,
-                "cgcnn",
-                "dim_14",
-                graph_builder=graph_builder,
-            )
+            with mock.patch.object(data.torch, "save") as save_graph_cache:
+                loaded_graphs, loaded_usable, second_audit = data.build_graph_cache(
+                    pairs,
+                    cache_path,
+                    "cgcnn",
+                    "dim_14",
+                    graph_builder=graph_builder,
+                )
+            save_graph_cache.assert_not_called()
 
         self.assertEqual(calls, [])
         self.assertEqual(second_audit["loaded_cached_molecules"], 3)
