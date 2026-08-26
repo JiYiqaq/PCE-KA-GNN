@@ -40,7 +40,7 @@ from pce.training import TargetScaler, evaluate, train_one_epoch
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-DEVICE_CACHE_VERSION = 2
+DEVICE_CACHE_VERSION = 3
 DEVICE_COLUMNS = (
     "record_id",
     "doi",

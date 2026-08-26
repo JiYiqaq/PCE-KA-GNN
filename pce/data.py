@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Dict, Tuple
 
 import dgl
@@ -41,6 +42,18 @@ def canonicalize_smiles(value: object) -> str | None:
     return Chem.MolToSmiles(molecule, canonical=True)
 
 
+def normalize_device_type(value: object) -> object:
+    """Retain only explicit conventional/inverted architecture polarity."""
+    if pd.isna(value) or not str(value).strip():
+        return pd.NA
+    normalized = str(value).strip().lower()
+    if re.search(r"\b(invert(?:ed)?|inverse)\b", normalized):
+        return "inverted"
+    if re.search(r"\b(conventional|normal|regular|standard|direct)\b", normalized):
+        return "conventional"
+    return pd.NA
+
+
 def prepare_device_table(
     frame: pd.DataFrame,
     donor_col: str = "donor_smiles",
@@ -70,6 +83,7 @@ def prepare_device_table(
             )
     for column in DEVICE_CATEGORICAL_COLUMNS:
         selected[column] = frame[column] if column in frame.columns else pd.NA
+    selected["device_type"] = selected["device_type"].map(normalize_device_type)
 
     present = (
         selected["donor_smiles"].notna()

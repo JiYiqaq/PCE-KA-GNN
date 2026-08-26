@@ -46,6 +46,32 @@ class PCEDataTests(unittest.TestCase):
         self.assertEqual(audit["usable_device_rows"], 3)
         self.assertEqual(audit["unique_pairs"], 2)
 
+    def test_device_type_is_restricted_to_actual_architecture_polarity(self):
+        data = self.load_module()
+        frame = pd.DataFrame(
+            {
+                "donor_smiles": ["CCO"] * 5,
+                "acceptor_smiles": ["CCN"] * 5,
+                "pce": [1.0] * 5,
+                "device_type": [
+                    "conventional BHJ",
+                    "Inverted",
+                    "regular",
+                    "organic solar cell",
+                    None,
+                ],
+            }
+        )
+
+        prepared, _ = data.prepare_device_table(frame)
+
+        self.assertEqual(
+            prepared["device_type"].tolist()[:3],
+            ["conventional", "inverted", "conventional"],
+        )
+        self.assertTrue(pd.isna(prepared.loc[3, "device_type"]))
+        self.assertTrue(pd.isna(prepared.loc[4, "device_type"]))
+
     def test_device_split_keeps_every_pair_in_exactly_one_partition(self):
         data = self.load_module()
         rows = []

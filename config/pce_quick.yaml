@@ -13,7 +13,7 @@ train_ratio: 0.8
 validation_ratio: 0.1
 test_ratio: 0.1
 seed: 42
-min_category_frequency: 2
+min_category_frequency: 10
 preprocessing_workers: 8
 graph_checkpoint_interval: 2000
 
