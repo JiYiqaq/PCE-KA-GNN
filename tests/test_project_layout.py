@@ -31,21 +31,44 @@ class ProjectLayoutTests(unittest.TestCase):
             self.assertNotIn("G:/", text)
             self.assertNotIn("D:/PychramProject/KA-GNN-main", text)
 
-    def test_all_run_configs_require_cuda_and_share_the_pair_cache(self):
+    def test_all_run_configs_require_cuda_topology_preload_and_device_cache(self):
         config_dir = PROJECT_DIR / "config"
         expected_cache_paths = {
-            "pce.yaml": "data/processed/canonical_pairs.csv",
-            "pce_quick.yaml": "data/processed/canonical_pairs.csv",
-            "pce_smoke.yaml": "data/processed/pce_smoke_pairs.csv",
+            "pce.yaml": "data/processed/device_records.csv",
+            "pce_material_only.yaml": "data/processed/device_records.csv",
+            "pce_quick.yaml": "data/processed/device_records.csv",
+            "pce_smoke.yaml": "data/processed/pce_smoke_devices.csv",
         }
         for config_path in config_dir.glob("*.yaml"):
             config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
             self.assertEqual(config["device"], "cuda", config_path.name)
+            self.assertTrue(config["preload_graphs_to_gpu"], config_path.name)
+            self.assertEqual(config["num_workers"], 0, config_path.name)
+            self.assertIn("topology", config["graph_cache_path"], config_path.name)
             self.assertEqual(
-                config["prepared_pairs_cache_path"],
+                config["prepared_devices_cache_path"],
                 expected_cache_paths[config_path.name],
                 config_path.name,
             )
+
+    def test_formal_multimodal_and_material_only_configs_share_the_split_contract(self):
+        multimodal = yaml.safe_load((PROJECT_DIR / "config/pce.yaml").read_text(encoding="utf-8"))
+        material_only_path = PROJECT_DIR / "config/pce_material_only.yaml"
+        self.assertTrue(material_only_path.is_file())
+        material_only = yaml.safe_load(material_only_path.read_text(encoding="utf-8"))
+
+        for field in (
+            "data_path",
+            "prepared_devices_cache_path",
+            "graph_cache_path",
+            "train_ratio",
+            "validation_ratio",
+            "test_ratio",
+            "seed",
+        ):
+            self.assertEqual(multimodal[field], material_only[field], field)
+        self.assertTrue(multimodal["use_context"])
+        self.assertFalse(material_only["use_context"])
 
     def test_gpu_requirements_pin_the_verified_production_stack(self):
         gpu_requirements_path = PROJECT_DIR / "requirements-gpu.txt"

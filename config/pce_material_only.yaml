@@ -1,5 +1,5 @@
 data_path: "data/raw/Active_Database.csv"
-output_dir: "outputs/pce_multimodal"
+output_dir: "outputs/pce_material_only"
 graph_cache_path: "data/processed/pce_topology_graphs.pt"
 prepared_devices_cache_path: "data/processed/device_records.csv"
 
@@ -23,7 +23,7 @@ grid_feat: 1
 num_layers: 4
 pooling: "avg"
 use_bias: true
-use_context: true
+use_context: false
 
 device: "cuda"
 preload_graphs_to_gpu: true

@@ -1,7 +1,7 @@
 data_path: "tests/fixtures/pce_smoke.csv"
 output_dir: "outputs/pce_smoke"
-graph_cache_path: "data/processed/pce_smoke_graphs.pt"
-prepared_pairs_cache_path: "data/processed/pce_smoke_pairs.csv"
+graph_cache_path: "data/processed/pce_smoke_topology_graphs.pt"
+prepared_devices_cache_path: "data/processed/pce_smoke_devices.csv"
 
 donor_column: "donor_smiles"
 acceptor_column: "acceptor_smiles"
@@ -13,16 +13,22 @@ train_ratio: 0.8
 validation_ratio: 0.1
 test_ratio: 0.1
 seed: 42
+min_category_frequency: 2
 
 in_feat: 113
 hidden_feat: 8
 fusion_hidden: 8
+context_hidden: 8
 grid_feat: 1
 num_layers: 2
 pooling: "avg"
 use_bias: true
+use_context: true
 
 device: "cuda"
+preload_graphs_to_gpu: true
+graph_preload_max_free_fraction: 0.6
+graph_preload_safety_factor: 2.0
 batch_size: 8
 num_workers: 0
 epochs: 2
