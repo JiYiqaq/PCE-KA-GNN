@@ -418,3 +418,67 @@ def collate_pair_graphs(samples: list[dict[str, object]]) -> dict[str, object]:
         "donor_smiles": [sample["donor_smiles"] for sample in samples],
         "acceptor_smiles": [sample["acceptor_smiles"] for sample in samples],
     }
+
+
+class DeviceGraphDataset(Dataset):
+    """Row-level PCE records with molecular graphs and fitted context tensors."""
+
+    def __init__(
+        self,
+        device_table: pd.DataFrame,
+        graphs: dict[str, dgl.DGLGraph],
+        numeric_context: torch.Tensor,
+        categorical_context: torch.Tensor,
+    ) -> None:
+        self.devices = device_table.reset_index(drop=True).copy()
+        self.graphs = graphs
+        if numeric_context.ndim != 2 or categorical_context.ndim != 2:
+            raise ValueError("context tensors must have shape [records, features]")
+        if len(self.devices) != numeric_context.shape[0] or len(self.devices) != categorical_context.shape[0]:
+            raise ValueError("device rows and context tensors must have the same length")
+        if numeric_context.device != categorical_context.device:
+            raise ValueError("numeric and categorical context tensors must use the same device")
+        self.numeric_context = numeric_context
+        self.categorical_context = categorical_context
+        self.targets = torch.as_tensor(
+            self.devices["pce"].to_numpy(dtype=np.float32),
+            dtype=torch.float32,
+            device=numeric_context.device,
+        )
+
+    def __len__(self) -> int:
+        return len(self.devices)
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        row = self.devices.iloc[index]
+        donor_smiles = row["donor_smiles"]
+        acceptor_smiles = row["acceptor_smiles"]
+        return {
+            "donor_graph": self.graphs[donor_smiles],
+            "acceptor_graph": self.graphs[acceptor_smiles],
+            "numeric_context": self.numeric_context[index],
+            "categorical_context": self.categorical_context[index],
+            "target": self.targets[index],
+            "record_id": row.get("record_id"),
+            "doi": row.get("doi"),
+            "donor_smiles": donor_smiles,
+            "acceptor_smiles": acceptor_smiles,
+        }
+
+
+def collate_device_graphs(samples: list[dict[str, object]]) -> dict[str, object]:
+    if not samples:
+        raise ValueError("cannot collate an empty device batch")
+    return {
+        "donor_graph": dgl.batch([sample["donor_graph"] for sample in samples]),
+        "acceptor_graph": dgl.batch([sample["acceptor_graph"] for sample in samples]),
+        "numeric_context": torch.stack([sample["numeric_context"] for sample in samples]),
+        "categorical_context": torch.stack(
+            [sample["categorical_context"] for sample in samples]
+        ),
+        "target": torch.stack([sample["target"] for sample in samples]),
+        "record_id": [sample["record_id"] for sample in samples],
+        "doi": [sample["doi"] for sample in samples],
+        "donor_smiles": [sample["donor_smiles"] for sample in samples],
+        "acceptor_smiles": [sample["acceptor_smiles"] for sample in samples],
+    }

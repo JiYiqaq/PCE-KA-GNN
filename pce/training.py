@@ -13,6 +13,25 @@ def _require_finite(tensor: torch.Tensor, name: str) -> None:
         raise FloatingPointError(f"non-finite values detected in {name}")
 
 
+def _predict_batch(
+    model: torch.nn.Module,
+    batch: Mapping[str, object],
+    donor_graph: object,
+    acceptor_graph: object,
+    device: torch.device,
+) -> torch.Tensor:
+    has_numeric = "numeric_context" in batch
+    has_categorical = "categorical_context" in batch
+    if has_numeric != has_categorical:
+        raise ValueError("numeric and categorical context must be supplied together")
+    if not has_numeric:
+        return model(donor_graph, acceptor_graph)
+    numeric_context = batch["numeric_context"].to(device=device, dtype=torch.float32)
+    categorical_context = batch["categorical_context"].to(device=device, dtype=torch.long)
+    _require_finite(numeric_context, "numeric context")
+    return model(donor_graph, acceptor_graph, numeric_context, categorical_context)
+
+
 @dataclass(frozen=True)
 class TargetScaler:
     mean: float
@@ -76,7 +95,7 @@ def train_one_epoch(
         _require_finite(standardized_target, "standardized training targets")
 
         optimizer.zero_grad()
-        prediction = model(donor_graph, acceptor_graph)
+        prediction = _predict_batch(model, batch, donor_graph, acceptor_graph, device)
         _require_finite(prediction, "training predictions")
         loss = F.mse_loss(prediction, standardized_target)
         _require_finite(loss, "training loss")
@@ -112,7 +131,9 @@ def evaluate(
             standardized_target = scaler.transform(target)
             _require_finite(target, "evaluation targets")
             _require_finite(standardized_target, "standardized evaluation targets")
-            standardized_prediction = model(donor_graph, acceptor_graph)
+            standardized_prediction = _predict_batch(
+                model, batch, donor_graph, acceptor_graph, device
+            )
             _require_finite(standardized_prediction, "evaluation predictions")
             loss = F.mse_loss(standardized_prediction, standardized_target)
             _require_finite(loss, "evaluation loss")

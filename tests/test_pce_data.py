@@ -258,6 +258,40 @@ class PCEDataTests(unittest.TestCase):
         self.assertTrue(torch.equal(batch["target"], torch.tensor([1.5, 2.5])))
         self.assertEqual(batch["donor_smiles"], ["A", "B"])
 
+    def test_device_dataset_collator_preserves_context_and_provenance(self):
+        data = self.load_module()
+        graph_a = dgl.graph(([0], [0]), num_nodes=1)
+        graph_b = dgl.graph(([0], [0]), num_nodes=1)
+        for graph in (graph_a, graph_b):
+            graph.ndata["feat"] = torch.ones(1, 113)
+        devices = pd.DataFrame(
+            {
+                "record_id": [101, 102],
+                "doi": ["doi-a", "doi-b"],
+                "donor_smiles": ["A", "B"],
+                "acceptor_smiles": ["B", "A"],
+                "pce": [4.5, 8.5],
+            }
+        )
+        numeric = torch.tensor([[1.0, 0.0], [2.0, 1.0]])
+        categorical = torch.tensor([[2, 0], [3, 4]], dtype=torch.long)
+        dataset = data.DeviceGraphDataset(
+            devices,
+            {"A": graph_a, "B": graph_b},
+            numeric,
+            categorical,
+        )
+
+        batch = data.collate_device_graphs([dataset[0], dataset[1]])
+
+        self.assertEqual(batch["donor_graph"].batch_size, 2)
+        self.assertEqual(batch["acceptor_graph"].batch_size, 2)
+        self.assertTrue(torch.equal(batch["numeric_context"], numeric))
+        self.assertTrue(torch.equal(batch["categorical_context"], categorical))
+        self.assertTrue(torch.equal(batch["target"], torch.tensor([4.5, 8.5])))
+        self.assertEqual(batch["record_id"], [101, 102])
+        self.assertEqual(batch["doi"], ["doi-a", "doi-b"])
+
     def test_author_graph_builder_uses_the_current_dgl_constructor(self):
         from utils.graph_path import atom_to_graph
 

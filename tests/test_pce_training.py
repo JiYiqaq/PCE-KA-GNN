@@ -22,6 +22,21 @@ class NonFinitePairModel(ConstantPairModel):
         return self.value.expand(donor_graph.batch_size) * float("nan")
 
 
+class ContextPairModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.tensor(0.0, device="cuda"))
+        self.received_context = False
+
+    def forward(self, donor_graph, acceptor_graph, numeric_context, categorical_context):
+        self.received_context = (
+            numeric_context.device.type == "cuda"
+            and categorical_context.device.type == "cuda"
+            and donor_graph.device.type == "cuda"
+        )
+        return self.weight.expand(donor_graph.batch_size)
+
+
 def make_batch(targets):
     graphs = [dgl.graph(([0], [0]), num_nodes=1) for _ in targets]
     return {
@@ -29,6 +44,13 @@ def make_batch(targets):
         "acceptor_graph": dgl.batch(graphs),
         "target": torch.tensor(targets, dtype=torch.float32),
     }
+
+
+def make_context_batch(targets):
+    batch = make_batch(targets)
+    batch["numeric_context"] = torch.ones(len(targets), 4)
+    batch["categorical_context"] = torch.zeros(len(targets), 2, dtype=torch.long)
+    return batch
 
 
 class PCETrainingTests(unittest.TestCase):
@@ -112,6 +134,22 @@ class PCETrainingTests(unittest.TestCase):
                 training.TargetScaler(mean=0.0, std=1.0),
                 torch.device("cpu"),
             )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "production training tests require CUDA")
+    def test_training_passes_device_context_on_cuda(self):
+        training = self.load_module()
+        model = ContextPairModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        training.train_one_epoch(
+            model,
+            [make_context_batch([1.0, 2.0])],
+            optimizer,
+            training.TargetScaler(mean=0.0, std=1.0),
+            torch.device("cuda"),
+        )
+
+        self.assertTrue(model.received_context)
 
 
 if __name__ == "__main__":
