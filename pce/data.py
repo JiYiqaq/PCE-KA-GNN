@@ -15,6 +15,23 @@ from utils.graph_path import path_complex_mol
 
 
 PAIR_COLUMNS = ("donor_smiles", "acceptor_smiles")
+DEVICE_NUMERIC_COLUMNS = (
+    "homo_d",
+    "lumo_d",
+    "homo_a",
+    "lumo_a",
+    "active_layer_thickness",
+    "annealing_temp",
+    "d_a_ratio",
+    "additive_ratio",
+)
+DEVICE_CATEGORICAL_COLUMNS = (
+    "device_type",
+    "etl_canonical",
+    "htl_canonical",
+    "solvent_canonical",
+    "additive_canonical",
+)
 
 
 def canonicalize_smiles(value: object) -> str | None:
@@ -90,6 +107,120 @@ def prepare_pair_table(
         "collapsed_replicate_rows": int(len(selected) - len(grouped)),
     }
     return grouped, audit
+
+
+def prepare_device_table(
+    frame: pd.DataFrame,
+    donor_col: str = "donor_smiles",
+    acceptor_col: str = "acceptor_smiles",
+    target_col: str = "pce",
+) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    required = {donor_col, acceptor_col, target_col}
+    missing_columns = sorted(required.difference(frame.columns))
+    if missing_columns:
+        raise ValueError(f"Missing required CSV columns: {', '.join(missing_columns)}")
+
+    input_rows = len(frame)
+    selected = pd.DataFrame(index=frame.index)
+    selected["record_id"] = (
+        frame["id"] if "id" in frame.columns else np.arange(input_rows, dtype=int)
+    )
+    selected["doi"] = frame["doi"] if "doi" in frame.columns else pd.NA
+    selected["donor_smiles"] = frame[donor_col]
+    selected["acceptor_smiles"] = frame[acceptor_col]
+    selected["pce"] = pd.to_numeric(frame[target_col], errors="coerce")
+    for column in DEVICE_NUMERIC_COLUMNS:
+        if column in {"d_a_ratio", "additive_ratio"}:
+            selected[column] = frame[column] if column in frame.columns else pd.NA
+        else:
+            selected[column] = (
+                pd.to_numeric(frame[column], errors="coerce")
+                if column in frame.columns
+                else np.nan
+            )
+    for column in DEVICE_CATEGORICAL_COLUMNS:
+        selected[column] = frame[column] if column in frame.columns else pd.NA
+
+    present = (
+        selected["donor_smiles"].notna()
+        & selected["acceptor_smiles"].notna()
+        & selected["pce"].notna()
+        & np.isfinite(selected["pce"])
+        & selected["donor_smiles"].astype(str).str.strip().ne("")
+        & selected["acceptor_smiles"].astype(str).str.strip().ne("")
+    )
+    selected = selected.loc[present].copy()
+    missing_or_non_numeric_rows = input_rows - len(selected)
+
+    unique_smiles = pd.unique(
+        pd.concat(
+            [selected["donor_smiles"], selected["acceptor_smiles"]],
+            ignore_index=True,
+        )
+    )
+    canonical = {value: canonicalize_smiles(value) for value in unique_smiles}
+    selected["donor_smiles"] = selected["donor_smiles"].map(canonical)
+    selected["acceptor_smiles"] = selected["acceptor_smiles"].map(canonical)
+    valid_smiles = selected["donor_smiles"].notna() & selected["acceptor_smiles"].notna()
+    invalid_smiles_rows = int((~valid_smiles).sum())
+    selected = selected.loc[valid_smiles].reset_index(drop=True)
+
+    audit = {
+        "input_rows": int(input_rows),
+        "missing_or_non_numeric_rows": int(missing_or_non_numeric_rows),
+        "invalid_smiles_rows": invalid_smiles_rows,
+        "usable_device_rows": int(len(selected)),
+        "unique_pairs": int(selected[list(PAIR_COLUMNS)].drop_duplicates().shape[0]),
+        "unique_molecules": int(
+            len(set(selected["donor_smiles"]).union(selected["acceptor_smiles"]))
+        ),
+    }
+    return selected, audit
+
+
+def split_device_table_by_pair(
+    device_table: pd.DataFrame,
+    train_ratio: float,
+    validation_ratio: float,
+    test_ratio: float,
+    seed: int,
+) -> Dict[str, pd.DataFrame]:
+    ratios = np.asarray([train_ratio, validation_ratio, test_ratio], dtype=float)
+    if np.any(ratios < 0) or not np.isclose(ratios.sum(), 1.0):
+        raise ValueError("train, validation, and test ratios must be non-negative and sum to 1")
+
+    pair_table = device_table[list(PAIR_COLUMNS)].drop_duplicates().reset_index(drop=True)
+    active_splits = int(np.count_nonzero(ratios))
+    if len(pair_table) < active_splits:
+        raise ValueError("not enough unique molecular pairs to populate every requested split")
+
+    counts = np.floor(len(pair_table) * ratios).astype(int)
+    for index, ratio in enumerate(ratios):
+        if ratio > 0 and counts[index] == 0:
+            counts[index] = 1
+    counts[2] += len(pair_table) - int(counts.sum())
+    if counts[2] < 0:
+        counts[0] += counts[2]
+        counts[2] = 0
+    if np.any((ratios > 0) & (counts == 0)):
+        raise ValueError("split ratios produce an empty requested split")
+
+    shuffled = pair_table.iloc[
+        np.random.default_rng(seed).permutation(len(pair_table))
+    ].reset_index(drop=True)
+    train_end = int(counts[0])
+    validation_end = train_end + int(counts[1])
+    pair_partitions = {
+        "train": shuffled.iloc[:train_end],
+        "validation": shuffled.iloc[train_end:validation_end],
+        "test": shuffled.iloc[validation_end:],
+    }
+    row_keys = pd.MultiIndex.from_frame(device_table[list(PAIR_COLUMNS)])
+    splits: Dict[str, pd.DataFrame] = {}
+    for name, pairs in pair_partitions.items():
+        allowed = pd.MultiIndex.from_frame(pairs[list(PAIR_COLUMNS)])
+        splits[name] = device_table.loc[row_keys.isin(allowed)].reset_index(drop=True).copy()
+    return splits
 
 
 def split_pair_table(
