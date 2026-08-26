@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -11,7 +13,8 @@ from rdkit import Chem, rdBase
 from utils.graph_path import encode_bond_14, get_node_attributes
 
 
-TOPOLOGY_CACHE_VERSION = 2
+TOPOLOGY_CACHE_VERSION = 4
+MAX_HEAVY_ATOMS = 500
 NODE_FEATURE_WIDTH = 113
 ATOM_FEATURE_WIDTH = 92
 EDGE_FEATURE_WIDTH = 21
@@ -49,9 +52,23 @@ def build_topology_graph(
         raise ValueError("SMILES must be a non-empty string")
 
     with rdBase.BlockLogs():
-        molecule = Chem.MolFromSmiles(smiles.strip())
+        molecule = Chem.MolFromSmiles(smiles.strip(), sanitize=False)
     if molecule is None:
         raise ValueError("RDKit could not parse the SMILES")
+    dummy_atoms = [atom.GetIdx() for atom in molecule.GetAtoms() if atom.GetAtomicNum() == 0]
+    if dummy_atoms:
+        raise ValueError(
+            "dummy atom placeholders cannot be assigned a physical element feature; "
+            f"atom indices={dummy_atoms}"
+        )
+    heavy_atoms = sum(atom.GetAtomicNum() > 1 for atom in molecule.GetAtoms())
+    if heavy_atoms > MAX_HEAVY_ATOMS:
+        raise ValueError(
+            f"molecule exceeds the {MAX_HEAVY_ATOMS}-heavy-atom production complexity limit; "
+            f"observed={heavy_atoms}"
+        )
+    with rdBase.BlockLogs():
+        Chem.SanitizeMol(molecule)
     molecule = Chem.AddHs(molecule)
 
     atom_features = torch.tensor(
@@ -97,13 +114,39 @@ def build_topology_graph(
     return graph
 
 
+def _configure_graph_worker() -> None:
+    torch.set_num_threads(1)
+
+
+def _build_default_graph_task(
+    arguments: tuple[str, str, str],
+) -> tuple[str, dgl.DGLGraph | None, str | None]:
+    smiles, encoder_atom, encoder_bond = arguments
+    try:
+        graph = build_topology_graph(smiles, encoder_atom, encoder_bond)
+        if not graph_has_finite_features(graph):
+            raise ValueError("graph contains non-finite features")
+        return smiles, graph, None
+    except Exception as error:
+        return smiles, None, f"{type(error).__name__}: {error}"
+
+
 def build_topology_graph_cache(
     smiles_values: Iterable[str],
     cache_path: str | Path,
     encoder_atom: str,
     encoder_bond: str,
     graph_builder: Callable[[str, str, str], dgl.DGLGraph] | None = None,
+    num_workers: int = 1,
+    progress_callback: Callable[[int, int], None] | None = None,
+    checkpoint_interval: int = 0,
 ) -> tuple[dict[str, dgl.DGLGraph], dict[str, object]]:
+    if num_workers < 1:
+        raise ValueError("num_workers must be at least 1")
+    if num_workers > 1 and graph_builder is not None:
+        raise ValueError("parallel cache construction requires the production graph builder")
+    if checkpoint_interval < 0:
+        raise ValueError("checkpoint_interval cannot be negative")
     cache_path = Path(cache_path)
     metadata = {
         "version": TOPOLOGY_CACHE_VERSION,
@@ -112,6 +155,7 @@ def build_topology_graph_cache(
         "encoder_bond": encoder_bond,
         "node_feature_width": NODE_FEATURE_WIDTH,
         "edge_feature_width": EDGE_FEATURE_WIDTH,
+        "max_heavy_atoms": MAX_HEAVY_ATOMS,
     }
     graphs: dict[str, dgl.DGLGraph] = {}
     failure_reasons: dict[str, str] = {}
@@ -142,30 +186,74 @@ def build_topology_graph_cache(
 
     requested = sorted({str(value).strip() for value in smiles_values if str(value).strip()})
     builder = graph_builder or build_topology_graph
-    built_molecules = 0
-    for smiles in requested:
-        if smiles in graphs or smiles in failure_reasons:
-            continue
+    pending = [
+        smiles for smiles in requested if smiles not in graphs and smiles not in failure_reasons
+    ]
+
+    def build_one(smiles: str) -> tuple[str, dgl.DGLGraph | None, str | None]:
         try:
             graph = builder(smiles, encoder_atom, encoder_bond)
             if not graph_has_finite_features(graph):
                 raise ValueError("graph contains non-finite features")
-            graphs[smiles] = graph
-            built_molecules += 1
+            return smiles, graph, None
         except Exception as error:
-            failure_reasons[smiles] = f"{type(error).__name__}: {error}"
-        cache_dirty = True
+            return smiles, None, f"{type(error).__name__}: {error}"
 
-    if cache_dirty:
+    built_molecules = 0
+
+    def save_cache() -> None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = cache_path.with_name(cache_path.name + ".tmp")
         torch.save(
             {
                 "metadata": metadata,
-                "graphs": graphs,
-                "failure_reasons": failure_reasons,
+                "graphs": {smiles: graphs[smiles] for smiles in sorted(graphs)},
+                "failure_reasons": {
+                    smiles: failure_reasons[smiles] for smiles in sorted(failure_reasons)
+                },
             },
-            cache_path,
+            temporary_path,
         )
+        temporary_path.replace(cache_path)
+
+    def retain_result(result: tuple[str, dgl.DGLGraph | None, str | None], completed: int) -> None:
+        nonlocal built_molecules, cache_dirty
+        smiles, graph, failure = result
+        if graph is not None:
+            graphs[smiles] = graph
+            built_molecules += 1
+        else:
+            failure_reasons[smiles] = str(failure)
+        cache_dirty = True
+        if progress_callback is not None:
+            progress_callback(completed, len(pending))
+        if checkpoint_interval and completed % checkpoint_interval == 0:
+            save_cache()
+
+    if num_workers == 1:
+        for completed, result in enumerate(map(build_one, pending), start=1):
+            retain_result(result, completed)
+    else:
+        with ProcessPoolExecutor(
+            max_workers=num_workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_configure_graph_worker,
+        ) as executor:
+            futures = [
+                executor.submit(
+                    _build_default_graph_task,
+                    (smiles, encoder_atom, encoder_bond),
+                )
+                for smiles in pending
+            ]
+            for completed, future in enumerate(as_completed(futures), start=1):
+                retain_result(future.result(), completed)
+
+    graphs = {smiles: graphs[smiles] for smiles in sorted(graphs)}
+    failure_reasons = {smiles: failure_reasons[smiles] for smiles in sorted(failure_reasons)}
+
+    if cache_dirty:
+        save_cache()
 
     requested_failures = {
         smiles: failure_reasons[smiles]
@@ -174,6 +262,8 @@ def build_topology_graph_cache(
     }
     audit: dict[str, object] = {
         "builder": metadata["builder"],
+        "num_workers": int(num_workers),
+        "checkpoint_interval": int(checkpoint_interval),
         "requested_molecules": len(requested),
         "loaded_cached_molecules": loaded_cached_molecules,
         "built_molecules": built_molecules,
@@ -182,4 +272,3 @@ def build_topology_graph_cache(
         "failure_reasons": requested_failures,
     }
     return {smiles: graphs[smiles] for smiles in requested if smiles in graphs}, audit
-

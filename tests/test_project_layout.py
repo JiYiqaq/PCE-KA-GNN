@@ -44,6 +44,7 @@ class ProjectLayoutTests(unittest.TestCase):
             self.assertEqual(config["device"], "cuda", config_path.name)
             self.assertTrue(config["preload_graphs_to_gpu"], config_path.name)
             self.assertEqual(config["num_workers"], 0, config_path.name)
+            self.assertGreater(config["preprocessing_workers"], 1, config_path.name)
             self.assertIn("topology", config["graph_cache_path"], config_path.name)
             self.assertEqual(
                 config["prepared_devices_cache_path"],
@@ -65,6 +66,11 @@ class ProjectLayoutTests(unittest.TestCase):
             "validation_ratio",
             "test_ratio",
             "seed",
+            "batch_size",
+            "learning_rate",
+            "lr_scheduler_factor",
+            "lr_scheduler_patience",
+            "min_learning_rate",
         ):
             self.assertEqual(multimodal[field], material_only[field], field)
         self.assertTrue(multimodal["use_context"])

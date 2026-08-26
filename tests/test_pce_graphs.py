@@ -43,6 +43,18 @@ class PCEGraphTests(unittest.TestCase):
         self.assertEqual(tuple(graph.ndata["feat"].shape[1:]), (113,))
         self.assertEqual(tuple(graph.edata["feat"].shape), (0, 21))
 
+    def test_dummy_atom_is_rejected_instead_of_using_a_fake_element_feature(self):
+        graphs = self.load_module()
+
+        with self.assertRaisesRegex(ValueError, "dummy atom"):
+            graphs.build_topology_graph("*CC", "cgcnn", "dim_14")
+
+    def test_molecule_over_production_complexity_limit_is_rejected_before_sanitization(self):
+        graphs = self.load_module()
+
+        with self.assertRaisesRegex(ValueError, "500-heavy-atom"):
+            graphs.build_topology_graph("C" * 501, "cgcnn", "dim_14")
+
     def test_double_bond_uses_the_declared_topological_length(self):
         graphs = self.load_module()
 
@@ -96,6 +108,21 @@ class PCEGraphTests(unittest.TestCase):
         self.assertEqual(set(loaded), {"CCO", "CCN"})
         self.assertEqual(second_audit["loaded_cached_molecules"], 2)
         self.assertEqual(second_audit["failed_molecules"], 1)
+
+    def test_parallel_cache_build_is_deterministic_and_reports_worker_count(self):
+        graphs = self.load_module()
+        with tempfile.TemporaryDirectory() as directory:
+            cache, audit = graphs.build_topology_graph_cache(
+                ["CCO", "CCN", "CCC"],
+                Path(directory) / "parallel.pt",
+                "cgcnn",
+                "dim_14",
+                num_workers=2,
+            )
+
+        self.assertEqual(list(cache), sorted(cache))
+        self.assertEqual(audit["num_workers"], 2)
+        self.assertEqual(audit["usable_molecules"], 3)
 
 
 if __name__ == "__main__":

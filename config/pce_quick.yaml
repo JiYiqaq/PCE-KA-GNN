@@ -14,6 +14,8 @@ validation_ratio: 0.1
 test_ratio: 0.1
 seed: 42
 min_category_frequency: 2
+preprocessing_workers: 8
+graph_checkpoint_interval: 2000
 
 in_feat: 113
 hidden_feat: 16
@@ -29,9 +31,12 @@ device: "cuda"
 preload_graphs_to_gpu: true
 graph_preload_max_free_fraction: 0.6
 graph_preload_safety_factor: 2.0
-batch_size: 64
+batch_size: 256
 num_workers: 0
 epochs: 2
 patience: 2
 learning_rate: 0.0003
 weight_decay: 0.0
+lr_scheduler_factor: 0.5
+lr_scheduler_patience: 1
+min_learning_rate: 0.000001

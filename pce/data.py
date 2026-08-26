@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Dict, Tuple
 
 import dgl
@@ -126,21 +127,46 @@ def split_device_table_by_pair(
 
     split_names = ("train", "validation", "test")
     active_indices = [index for index, ratio in enumerate(ratios) if ratio > 0]
+    raw_pair_targets = ratios * len(pair_table)
+    pair_quotas = np.floor(raw_pair_targets).astype(int)
+    for index in active_indices:
+        pair_quotas[index] = max(1, pair_quotas[index])
+    while int(pair_quotas.sum()) < len(pair_table):
+        candidates = [
+            index
+            for index in active_indices
+            if pair_quotas[index] < math.ceil(raw_pair_targets[index])
+        ] or active_indices
+        chosen = max(
+            candidates,
+            key=lambda index: (raw_pair_targets[index] - pair_quotas[index], -index),
+        )
+        pair_quotas[chosen] += 1
+    while int(pair_quotas.sum()) > len(pair_table):
+        candidates = [index for index in active_indices if pair_quotas[index] > 1]
+        chosen = max(candidates, key=lambda index: (pair_quotas[index], -index))
+        pair_quotas[chosen] -= 1
+
     target_rows = ratios * len(device_table)
     assigned_rows = np.zeros(3, dtype=int)
+    assigned_pairs = np.zeros(3, dtype=int)
     pair_assignments: list[int] = []
     rng = np.random.default_rng(seed)
     pair_table = pair_table.assign(_tie_break=rng.random(len(pair_table))).sort_values(
         ["row_count", "_tie_break"], ascending=[False, True], kind="stable"
     ).reset_index(drop=True)
-    for pair_index, pair in pair_table.iterrows():
-        remaining_pairs = len(pair_table) - pair_index
-        empty_splits = [index for index in active_indices if assigned_rows[index] == 0]
-        candidates = empty_splits if remaining_pairs == len(empty_splits) else active_indices
+    for _, pair in pair_table.iterrows():
+        candidates = [
+            index for index in active_indices if assigned_pairs[index] < pair_quotas[index]
+        ]
         deficits = target_rows - assigned_rows
-        chosen = max(candidates, key=lambda index: (deficits[index], -index))
+        chosen = max(
+            candidates,
+            key=lambda index: (deficits[index] / target_rows[index], -index),
+        )
         pair_assignments.append(chosen)
         assigned_rows[chosen] += int(pair["row_count"])
+        assigned_pairs[chosen] += 1
     pair_table["_split_index"] = pair_assignments
     pair_partitions = {
         name: pair_table.loc[pair_table["_split_index"] == index, list(PAIR_COLUMNS)]

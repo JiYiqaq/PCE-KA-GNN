@@ -93,6 +93,11 @@ class PCEDataTests(unittest.TestCase):
         self.assertLessEqual(abs(row_counts[0] - 64), 8)
         self.assertLessEqual(abs(row_counts[1] - 8), 4)
         self.assertLessEqual(abs(row_counts[2] - 8), 4)
+        pair_counts = [
+            splits[name][["donor_smiles", "acceptor_smiles"]].drop_duplicates().shape[0]
+            for name in ("train", "validation", "test")
+        ]
+        self.assertEqual(pair_counts, [8, 1, 1])
 
     def test_device_dataset_collator_preserves_context_and_provenance(self):
         data = self.load_module()

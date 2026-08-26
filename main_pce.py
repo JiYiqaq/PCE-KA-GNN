@@ -369,7 +369,8 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     )
     print(
         "RDKit topology construction uses CPU because RDKit has no CUDA graph builder; "
-        "its versioned result is cached. All neural-network work remains on CUDA."
+        f"it uses {int(config.get('preprocessing_workers', 8))} bounded workers and caches the result. "
+        "All neural-network work remains on CUDA."
     )
 
     records, data_audit = load_device_data(config)
@@ -381,11 +382,19 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         pd.concat([records["donor_smiles"], records["acceptor_smiles"]], ignore_index=True)
     )
     graph_started = time.perf_counter()
+
+    def graph_progress(completed: int, total: int) -> None:
+        if completed == total or completed % 250 == 0:
+            print(f"Topology cache progress | {completed}/{total} new molecules")
+
     cpu_graphs, graph_audit = build_topology_graph_cache(
         required_smiles,
         graph_cache_path,
         encoder_atom=config.get("encoder_atom", "cgcnn"),
         encoder_bond=config.get("encoder_bond", "dim_14"),
+        num_workers=int(config.get("preprocessing_workers", 8)),
+        progress_callback=graph_progress,
+        checkpoint_interval=int(config.get("graph_checkpoint_interval", 2000)),
     )
     graph_audit["cache_path"] = portable_result_path(graph_cache_path)
     graph_audit["elapsed_seconds"] = round(time.perf_counter() - graph_started, 3)
@@ -483,6 +492,13 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         lr=float(config.get("learning_rate", 1e-4)),
         weight_decay=float(config.get("weight_decay", 0.0)),
     )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=float(config.get("lr_scheduler_factor", 0.5)),
+        patience=int(config.get("lr_scheduler_patience", 8)),
+        min_lr=float(config.get("min_learning_rate", 1e-6)),
+    )
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
     print(
         f"Model | mode={'multimodal' if use_context else 'material-only'}; "
@@ -498,6 +514,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     best_epoch = 0
     patience = 0
     for epoch in range(1, epochs + 1):
+        epoch_learning_rate = float(optimizer.param_groups[0]["lr"])
         torch.cuda.synchronize(device)
         epoch_started = time.perf_counter()
         train_loss = train_one_epoch(model, loaders["train"], optimizer, scaler, device)
@@ -511,14 +528,16 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
             "validation_mae": float(metrics["mae"]),
             "validation_rmse": float(metrics["rmse"]),
             "validation_r2": float(metrics["r2"]),
+            "learning_rate": epoch_learning_rate,
             "epoch_seconds": round(time.perf_counter() - epoch_started, 3),
         }
         history.append(row)
         print(
             f"Epoch {epoch:03d} | {row['epoch_seconds']:.2f}s | train MSE(z)={train_loss:.5f} | "
             f"val MAE={row['validation_mae']:.5f} | val RMSE={row['validation_rmse']:.5f} | "
-            f"val R2={row['validation_r2']:.5f}"
+            f"val R2={row['validation_r2']:.5f} | lr={epoch_learning_rate:.2e}"
         )
+        scheduler.step(row["validation_mae"])
         if row["validation_mae"] < best_validation_mae:
             best_validation_mae = row["validation_mae"]
             best_epoch = epoch
@@ -528,6 +547,8 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                     "model_state": model.state_dict(),
                     "model_config": model_config,
                     "target_scaler": scaler.to_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "scheduler_state": scheduler.state_dict(),
                     "context_preprocessor": preprocessor.to_dict(),
                     "feature_contract": {
                         "numeric_sources": list(NUMERIC_SOURCE_COLUMNS),

@@ -1,0 +1,33 @@
+{
+  "signature": {
+    "version": 2,
+    "source_sha256": "218E2034F895682505815C60AD42E14B0E24F1F1E11740834403660BB3F0487F",
+    "donor_column": "donor_smiles",
+    "acceptor_column": "acceptor_smiles",
+    "target_column": "pce",
+    "retained_context_columns": [
+      "homo_d",
+      "lumo_d",
+      "homo_a",
+      "lumo_a",
+      "active_layer_thickness",
+      "annealing_temp",
+      "d_a_ratio",
+      "additive_ratio",
+      "device_type",
+      "etl_canonical",
+      "htl_canonical",
+      "solvent_canonical",
+      "additive_canonical"
+    ]
+  },
+  "cache_sha256": "F0B0775309DB764AABA77080457B97AB91B189A46D7FC48F1769BE04D61B3E9D",
+  "data_audit": {
+    "input_rows": 38849,
+    "missing_or_non_numeric_rows": 12348,
+    "invalid_smiles_rows": 0,
+    "usable_device_rows": 26501,
+    "unique_pairs": 5877,
+    "unique_molecules": 3987
+  }
+}
