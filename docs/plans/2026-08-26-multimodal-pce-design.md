@@ -16,7 +16,7 @@ Each retained row is one device observation. Required fields are `donor_smiles`,
 
 ## Molecular graph representation
 
-The old builder made 3D embedding a prerequisite even though the active PCE model did not consume coordinates directly. The replacement constructs a deterministic bidirectional topology graph from every RDKit-valid canonical SMILES, without requiring a conformer. It preserves the author's 92-dimensional CGCNN element representation and 21-dimensional bond representation; mean incident-bond features are concatenated to produce the existing 113-dimensional node input.
+The old builder made 3D embedding a prerequisite even though the active PCE model did not consume coordinates directly. The replacement constructs a deterministic bidirectional topology graph from canonical SMILES without requiring a conformer. It preserves the author's 92-dimensional CGCNN element representation and 21-dimensional bond representation; mean incident-bond features are concatenated to produce the existing 113-dimensional node input. Dummy atoms are rejected rather than assigned a fictitious element, and a fixed 500-heavy-atom production limit bounds graph complexity and rejects two pathological database structures.
 
 The cache records its builder version, encoders, successful graphs, and exact failure reasons. A row is removed only when either SMILES is invalid or topology feature construction genuinely fails. No geometry failure can remove a row. Three-dimensional learning is intentionally not mixed into this change: adding a scientifically validated geometry branch requires a separate conformer protocol and ablation rather than zero-filled pseudo-geometry.
 
@@ -26,7 +26,7 @@ The shared KA-GNN encoder produces one 64-dimensional vector for each molecule. 
 
 All rows sharing the same ordered canonical donor-acceptor pair are assigned to the same train, validation, or test split. This prevents direct pair leakage while retaining condition-level observations. Context preprocessing is fitted after splitting. The primary checkpoint minimizes validation MAE; final metrics are reported once on the held-out test set.
 
-Formal training requires `cuda:0`, deterministic CUDA algorithms, and the verified PyTorch/DGL builds. If the topology graph collection fits within a conservative fraction of free GPU memory, all unique graphs are preloaded to CUDA once; otherwise the run fails with a concrete memory report instead of silently taking a slower execution path. RDKit topology construction remains CPU-bound because this code path has no GPU implementation, and its result is cached.
+Formal training requires `cuda:0`, deterministic CUDA algorithms, and the verified PyTorch/DGL builds. If the topology graph collection fits within a conservative fraction of free GPU memory, all unique graphs are preloaded to CUDA once; otherwise the run fails with a concrete memory report instead of silently taking a slower execution path. RDKit topology construction remains CPU-bound because this code path has no GPU implementation; it runs in spawn-safe worker processes and checkpoints an atomic reusable cache.
 
 ## Validation and acceptance criteria
 
@@ -39,3 +39,6 @@ Formal training requires `cuda:0`, deterministic CUDA algorithms, and the verifi
 - A production-stack smoke run and the formal command complete on GTX 1650 Ti with runtime metadata and cache audits.
 - The formal multimodal result is compared with a material-only ablation using the identical rows and split.
 
+## Verified outcome
+
+Topology construction retained 3,982/3,987 unique molecules and 26,488/26,501 otherwise usable device records. The pair-disjoint split contains 21,183/2,653/2,652 records and 4,698/587/587 unique pairs. On the verified GTX 1650 Ti CUDA stack, the multimodal model achieved test MAE 1.6858, RMSE 2.3500, and R² 0.6486; the identical-split material-only ablation achieved 1.8206, 2.5507, and 0.5861. These are deterministic single-seed results and require multi-seed replication before publication claims.
