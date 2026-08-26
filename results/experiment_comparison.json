@@ -1,0 +1,43 @@
+{
+  "design": "paired predictions with donor-acceptor pair as the independent cluster",
+  "test_records": 2652,
+  "test_pairs": 587,
+  "error_difference_definition": "material_only_absolute_error - multimodal_absolute_error",
+  "multimodal_metrics": {
+    "mae": 1.6857884280088722,
+    "rmse": 2.3500153260723717,
+    "r2": 0.6486264150987409
+  },
+  "material_only_metrics": {
+    "mae": 1.8206469323747039,
+    "rmse": 2.5506963500873767,
+    "r2": 0.5860525212399312
+  },
+  "multimodal_improvement": {
+    "mae_reduction": 0.1348585043658317,
+    "rmse_reduction": 0.20068102401500498,
+    "r2_increase": 0.06257389385880963,
+    "relative_mae_reduction_percent": 7.407174997402336,
+    "pair_cluster_bootstrap_95_ci_for_mae_reduction": [
+      0.022443524020165913,
+      0.38428605238171437
+    ]
+  },
+  "record_level": {
+    "multimodal_lower_absolute_error_fraction": 0.5388386123680241,
+    "material_only_lower_absolute_error_fraction": 0.4611613876319759,
+    "ties_fraction": 0.0
+  },
+  "pair_level_diagnostics": {
+    "mean_difference": 0.22622187764800492,
+    "median_difference": 0.1536874771118164,
+    "standard_deviation": 1.3304609948153063,
+    "shapiro_w": 0.9767117500305176,
+    "shapiro_p": 4.7966484117978325e-08,
+    "selected_test": "two-sided Wilcoxon signed-rank due to non-normal paired differences",
+    "wilcoxon_statistic": 68911.0,
+    "wilcoxon_p": 6.799345955790013e-05,
+    "rank_biserial_correlation": 0.19040625954557203
+  },
+  "limitation": "This paired test quantifies test-pair variation for one deterministic training seed; it does not quantify model-training variability across seeds."
+}

@@ -1,0 +1,93 @@
+{
+  "preprocessor_fitted_on": "train_only",
+  "category_sizes": {
+    "device_type": 4,
+    "etl_canonical": 49,
+    "htl_canonical": 21,
+    "solvent_canonical": 19,
+    "additive_canonical": 24
+  },
+  "splits": {
+    "train": {
+      "rows": 21183,
+      "numeric_available_fraction": {
+        "homo_d": 0.9642165899276733,
+        "lumo_d": 0.964074969291687,
+        "homo_a": 0.9491573572158813,
+        "lumo_a": 0.9491573572158813,
+        "active_layer_thickness": 0.2994382381439209,
+        "annealing_temp": 0.23986215889453888,
+        "donor_acceptor_log_ratio": 0.49794647097587585,
+        "additive_percentage": 0.18802814185619354
+      },
+      "categorical_missing_fraction": {
+        "device_type": 0.37275174260139465,
+        "etl_canonical": 0.43374404311180115,
+        "htl_canonical": 0.46079403162002563,
+        "solvent_canonical": 0.669451892375946,
+        "additive_canonical": 0.8315158486366272
+      },
+      "categorical_unknown_fraction": {
+        "device_type": 0.0,
+        "etl_canonical": 0.07586272060871124,
+        "htl_canonical": 0.04092904552817345,
+        "solvent_canonical": 0.020676957443356514,
+        "additive_canonical": 0.04909597337245941
+      }
+    },
+    "validation": {
+      "rows": 2653,
+      "numeric_available_fraction": {
+        "homo_d": 0.9619299173355103,
+        "lumo_d": 0.9619299173355103,
+        "homo_a": 0.956652820110321,
+        "lumo_a": 0.956652820110321,
+        "active_layer_thickness": 0.27516019344329834,
+        "annealing_temp": 0.21598190069198608,
+        "donor_acceptor_log_ratio": 0.43950244784355164,
+        "additive_percentage": 0.16321146488189697
+      },
+      "categorical_missing_fraction": {
+        "device_type": 0.3871089220046997,
+        "etl_canonical": 0.45495665073394775,
+        "htl_canonical": 0.4229174554347992,
+        "solvent_canonical": 0.6973237991333008,
+        "additive_canonical": 0.7975876331329346
+      },
+      "categorical_unknown_fraction": {
+        "device_type": 0.0,
+        "etl_canonical": 0.0670938566327095,
+        "htl_canonical": 0.07274783402681351,
+        "solvent_canonical": 0.017338860780000687,
+        "additive_canonical": 0.09159442037343979
+      }
+    },
+    "test": {
+      "rows": 2652,
+      "numeric_available_fraction": {
+        "homo_d": 0.9611613750457764,
+        "lumo_d": 0.9611613750457764,
+        "homo_a": 0.9766213893890381,
+        "lumo_a": 0.9766213893890381,
+        "active_layer_thickness": 0.33748114109039307,
+        "annealing_temp": 0.3427601754665375,
+        "donor_acceptor_log_ratio": 0.6085972785949707,
+        "additive_percentage": 0.11726998537778854
+      },
+      "categorical_missing_fraction": {
+        "device_type": 0.32692307233810425,
+        "etl_canonical": 0.48831069469451904,
+        "htl_canonical": 0.38725489377975464,
+        "solvent_canonical": 0.6146304607391357,
+        "additive_canonical": 0.8744344115257263
+      },
+      "categorical_unknown_fraction": {
+        "device_type": 0.0,
+        "etl_canonical": 0.06862745434045792,
+        "htl_canonical": 0.046380091458559036,
+        "solvent_canonical": 0.02601809985935688,
+        "additive_canonical": 0.04600301757454872
+      }
+    }
+  }
+}
