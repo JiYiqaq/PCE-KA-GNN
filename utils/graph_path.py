@@ -178,7 +178,7 @@ def encode_bond_26(bond,mol):
 
 def bond_length_approximation(bond_type):
     bond_length_dict = {"SINGLE": 1.0, "DOUBLE": 1.4, "TRIPLE": 1.8, "AROMATIC": 1.5}
-    return bond_length_dict.get(bond_type, 1.0)
+    return bond_length_dict.get(str(bond_type), 1.0)
 
 def encode_bond_14(bond):
     #7+4+2+2+6 = 21
